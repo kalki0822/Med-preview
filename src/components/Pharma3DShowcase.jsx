@@ -45,6 +45,8 @@ export default function Pharma3DShowcase() {
 
     // Three.js Scene Setup
     const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0xeaf1f1, 0.025);
+
     const camera = new THREE.PerspectiveCamera(40, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
     camera.position.set(0, 0, 11);
 
@@ -57,46 +59,58 @@ export default function Pharma3DShowcase() {
     renderer.setSize(canvas.clientWidth, canvas.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.1);
     scene.add(ambientLight);
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.8);
     keyLight.position.set(6, 10, 8);
     keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 1024;
+    keyLight.shadow.mapSize.height = 1024;
     scene.add(keyLight);
 
-    const rimLight = new THREE.DirectionalLight(0x58c7c0, 2.8);
+    const rimLight = new THREE.DirectionalLight(0x58c7c0, 2.6);
     rimLight.position.set(-8, -4, -6);
     scene.add(rimLight);
 
-    // 3D Objects for the 3 stages:
-    // Stage 1: Big Showcase Capsule pair
-    const capsuleGroup = new THREE.Group();
-    const cap1 = createCapsule(0x18a99f, 0xffffff, 0.58, 1.2);
-    cap1.position.set(-0.4, 0.3, 0);
-    cap1.rotation.set(0.4, 0.3, 0.7);
+    const fillLight = new THREE.DirectionalLight(0xdcf0ee, 1.2);
+    fillLight.position.set(0, -6, 6);
+    scene.add(fillLight);
 
-    const cap2 = createCapsule(0xffffff, 0x103444, 0.5, 1.0);
-    cap2.position.set(1.1, -0.6, 0.8);
-    cap2.rotation.set(-0.3, 0.6, -0.4);
+    // -------------------------------------------------------------
+    // 3D MODELS FOR THE THREE PHARMACEUTICAL STAGES
+    // -------------------------------------------------------------
+
+    // Stage 1: Featured 3D Capsule with Explodable Shell & Internal Pellets
+    const capsuleGroup = new THREE.Group();
+    // Featured primary capsule
+    const cap1 = createCapsule(0x18a99f, 0xffffff, 0.58, 1.25, true);
+    cap1.position.set(0, 0.1, 0);
+    cap1.rotation.set(0.2, 0.2, 0.45);
+
+    // Companion capsule for aesthetic depth
+    const cap2 = createCapsule(0xffffff, 0x103444, 0.44, 0.95, false);
+    cap2.position.set(1.4, -0.7, -0.6);
+    cap2.rotation.set(-0.35, 0.6, -0.4);
 
     capsuleGroup.add(cap1, cap2);
     capsuleGroup.position.set(0, 0, 0);
     scene.add(capsuleGroup);
 
-    // Stage 2: 3D Blister Pack
+    // Stage 2: 3D Blister Pack (with separable foil, PVC tray, and tablets)
     const blister = createBlisterPack();
-    blister.scale.set(0.95, 0.95, 0.95);
-    blister.position.set(0, 0, -8);
-    blister.rotation.set(0.3, -0.4, 0.1);
+    blister.scale.set(0.92, 0.92, 0.92);
+    blister.position.set(0, 0, -20);
+    blister.rotation.set(0.2, -0.3, 0.1);
     scene.add(blister);
 
-    // Stage 3: 3D Medicine Bottle
+    // Stage 3: 3D Medicine Wholesale Bottle
     const bottle = createMedicineBottle();
-    bottle.scale.set(1.1, 1.1, 1.1);
-    bottle.position.set(0, -1.8, -12);
+    bottle.scale.set(1.05, 1.05, 1.05);
+    bottle.position.set(0, -1.8, -25);
     bottle.rotation.set(0.08, 0.2, 0);
     scene.add(bottle);
 
@@ -104,39 +118,67 @@ export default function Pharma3DShowcase() {
     const mouse = { x: 0, y: 0, targetX: 0, targetY: 0 };
     const onMouseMove = (e) => {
       const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
       const x = (e.clientX - rect.left) / rect.width * 2 - 1;
       const y = -(e.clientY - rect.top) / rect.height * 2 + 1;
-      mouse.targetX = x * 0.3;
-      mouse.targetY = y * 0.2;
+      mouse.targetX = Math.max(-1, Math.min(1, x)) * 0.25;
+      mouse.targetY = Math.max(-1, Math.min(1, y)) * 0.18;
     };
     window.addEventListener('mousemove', onMouseMove, { passive: true });
 
-    // GSAP ScrollTrigger scrubbing through 0.0 to 1.0 across the section
-    let scrollProgress = { val: 0 };
+    // Scroll progress container
+    const scrollProgress = { val: 0 };
 
-    const trigger = ScrollTrigger.create({
-      trigger: section,
-      start: 'top 30%',
-      end: 'bottom 85%',
-      scrub: 1.0,
-      onUpdate: (self) => {
-        scrollProgress.val = self.progress;
+    // GSAP MatchMedia for responsive scroll synchronization
+    const mm = gsap.matchMedia();
 
-        if (self.progress < 0.35) {
-          setActiveStage(0);
-        } else if (self.progress < 0.72) {
-          setActiveStage(1);
-        } else {
-          setActiveStage(2);
+    mm.add('(min-width: 769px)', () => {
+      // Desktop ScrollTrigger
+      return ScrollTrigger.create({
+        trigger: section,
+        start: 'top 20%',
+        end: 'bottom 85%',
+        scrub: 0.6,
+        invalidateOnRefresh: true,
+        onUpdate: (self) => {
+          scrollProgress.val = self.progress;
+          if (self.progress < 0.33) {
+            setActiveStage(0);
+          } else if (self.progress < 0.67) {
+            setActiveStage(1);
+          } else {
+            setActiveStage(2);
+          }
         }
-      }
+      });
     });
 
-    // Visibility observer to pause render loop
+    mm.add('(max-width: 768px)', () => {
+      // Mobile ScrollTrigger - calibrated to when cards scroll through viewport
+      return ScrollTrigger.create({
+        trigger: section,
+        start: 'top 70px',
+        end: 'bottom bottom',
+        scrub: 0.5,
+        invalidateOnRefresh: true,
+        onUpdate: (self) => {
+          scrollProgress.val = self.progress;
+          if (self.progress < 0.33) {
+            setActiveStage(0);
+          } else if (self.progress < 0.67) {
+            setActiveStage(1);
+          } else {
+            setActiveStage(2);
+          }
+        }
+      });
+    });
+
+    // Visibility observer to pause render loop when offscreen
     let isVisible = false;
     const observer = new IntersectionObserver(([entry]) => {
       isVisible = entry.isIntersecting;
-    }, { threshold: 0.05 });
+    }, { threshold: 0.02 });
     observer.observe(section);
 
     let animationId;
@@ -146,52 +188,122 @@ export default function Pharma3DShowcase() {
       animationId = requestAnimationFrame(animate);
       if (!isVisible) return;
 
-      const delta = clock.getDelta();
       const time = clock.getElapsedTime();
+      const isMobile = window.innerWidth <= 768;
 
+      // Smooth pointer interpolation
       mouse.x += (mouse.targetX - mouse.x) * 0.06;
       mouse.y += (mouse.targetY - mouse.y) * 0.06;
 
-      const p = scrollProgress.val;
+      const p = Math.max(0, Math.min(1, scrollProgress.val));
 
-      // Stage transitions based on scroll progress:
-      // Stage 1: Capsules
-      if (p <= 0.45) {
-        const localP = p / 0.45;
-        capsuleGroup.position.z = -localP * 6;
-        capsuleGroup.position.x = -localP * 3;
-        capsuleGroup.rotation.y = localP * 1.8 + mouse.x + (prefersReducedMotion ? 0 : Math.sin(time * 0.6) * 0.08);
-        capsuleGroup.rotation.x = localP * 0.6 + mouse.y;
-        capsuleGroup.scale.setScalar(Math.max(0.001, 1 - localP * 0.5));
+      // Responsive base scaling & positioning to ensure 100% visibility without clipping
+      const baseScale = isMobile ? 0.78 : 1.0;
+      camera.fov = isMobile ? 42 : 40;
+      camera.position.z = isMobile ? 12.2 : 11.0;
+      camera.updateProjectionMatrix();
+
+      // Idle float (suppressed if prefers-reduced-motion)
+      const idleFloat = prefersReducedMotion ? 0 : Math.sin(time * 1.2) * 0.05;
+
+      // -------------------------------------------------------------
+      // STAGE 1: FEATURED CAPSULE (p: 0.00 -> 0.38, in focus: 0.00 -> 0.33)
+      // -------------------------------------------------------------
+      if (p <= 0.40) {
+        capsuleGroup.visible = true;
+        const t0 = Math.min(1, p / 0.33);
+
+        // 1. EXACT 360° ROTATION around vertical axis
+        const rotY = t0 * Math.PI * 2 + (prefersReducedMotion ? 0 : Math.sin(time * 0.5) * 0.04);
+        capsuleGroup.rotation.y = rotY + mouse.x * 0.4;
+        capsuleGroup.rotation.x = 0.15 + mouse.y * 0.3;
+        capsuleGroup.rotation.z = Math.sin(t0 * Math.PI) * 0.12;
+
+        // 2. EXPLODED COMPONENT ANIMATION: Shell halves separate to reveal internal pellets
+        if (cap1.userData && cap1.userData.topHalf && cap1.userData.bottomHalf) {
+          // Explode peaks at middle of Stage 1 (t0 ~ 0.5) and reassembles smoothly
+          const explodeFactor = Math.sin(t0 * Math.PI);
+          cap1.userData.topHalf.position.y = explodeFactor * 0.55;
+          cap1.userData.bottomHalf.position.y = -explodeFactor * 0.55;
+          if (cap1.userData.band) {
+            cap1.userData.band.scale.setScalar(Math.max(0.01, 1 - explodeFactor * 1.4));
+          }
+          if (cap1.userData.pellets) {
+            cap1.userData.pellets.scale.setScalar(1 + explodeFactor * 0.35);
+          }
+        }
+
+        // Companion capsule movement
+        cap2.position.x = 1.3 + Math.sin(t0 * Math.PI) * 0.3;
+        cap2.position.y = -0.65 + idleFloat;
+
+        // Exit transition towards Stage 2
+        if (p > 0.30) {
+          const exitNorm = (p - 0.30) / 0.10;
+          capsuleGroup.position.z = -exitNorm * 12;
+          capsuleGroup.scale.setScalar(Math.max(0.001, (1 - exitNorm * 0.6) * baseScale));
+        } else {
+          capsuleGroup.position.set(0, idleFloat, 0);
+          capsuleGroup.scale.setScalar(baseScale);
+        }
       } else {
-        capsuleGroup.position.z = -100;
+        capsuleGroup.visible = false;
+        capsuleGroup.position.z = -50;
       }
 
-      // Stage 2: Blister pack
-      if (p >= 0.15 && p <= 0.82) {
-        const distFromCenter = Math.abs(p - 0.52);
-        blister.position.z = 2.0 - distFromCenter * 14;
-        blister.position.y = -0.2 + (0.52 - p) * 1.5;
-        blister.position.x = mouse.x * 1.2;
-        blister.rotation.y = -0.4 + (p - 0.52) * 2.2 + mouse.x;
-        blister.rotation.x = 0.2 + (p - 0.52) * 0.8 + mouse.y;
-        blister.rotation.z = Math.sin((p - 0.2) * Math.PI) * 0.15;
-        blister.scale.setScalar(Math.max(0.001, 1.1 - distFromCenter * 0.9));
+      // -------------------------------------------------------------
+      // STAGE 2: 3D BLISTER PACK (p: 0.28 -> 0.72, in focus: 0.33 -> 0.67)
+      // -------------------------------------------------------------
+      if (p >= 0.26 && p <= 0.74) {
+        blister.visible = true;
+        const t1 = Math.min(1, Math.max(0, (p - 0.33) / 0.34));
+
+        // 1. EXACT 360° ROTATION around vertical axis
+        const rotY = -0.3 + t1 * Math.PI * 2 + mouse.x * 0.4;
+        blister.rotation.y = rotY;
+        blister.rotation.x = 0.2 + mouse.y * 0.3;
+        blister.rotation.z = Math.sin(t1 * Math.PI) * 0.08;
+
+        // 2. EXPLODED COMPONENT ANIMATION: Foil, PVC tray, and tablets separate in depth
+        if (blister.userData && blister.userData.foil && blister.userData.pvc && blister.userData.tablets) {
+          const blisterExplode = Math.sin(t1 * Math.PI) * 0.75;
+          blister.userData.foil.position.z = -blisterExplode * 0.85;
+          blister.userData.pvc.position.z = blisterExplode * 0.85;
+          blister.userData.tablets.position.z = 0;
+        }
+
+        // Position: glides in from z = -14, stays centered, glides out to z = -14
+        const distFromCenter = Math.abs(p - 0.50);
+        blister.position.z = 0.2 - distFromCenter * 16;
+        blister.position.y = idleFloat * 0.7;
+        blister.position.x = mouse.x * 0.5;
+        blister.scale.setScalar(Math.max(0.001, (0.92 - distFromCenter * 0.8) * baseScale));
       } else {
-        blister.position.z = -100;
+        blister.visible = false;
+        blister.position.z = -50;
       }
 
-      // Stage 3: Bottle
-      if (p >= 0.5) {
-        const norm = Math.min(1, (p - 0.5) / 0.42);
-        bottle.position.z = -8 + norm * 8.5;
-        bottle.position.x = mouse.x * 1.2;
-        bottle.position.y = -1.8 + mouse.y;
-        bottle.rotation.y = 0.2 + norm * 2.4 + mouse.x;
-        bottle.rotation.x = mouse.y * 0.4;
-        bottle.scale.setScalar(0.7 + norm * 0.35);
+      // -------------------------------------------------------------
+      // STAGE 3: MEDICINE WHOLESALE BOTTLE (p: 0.62 -> 1.00, in focus: 0.67 -> 1.00)
+      // -------------------------------------------------------------
+      if (p >= 0.60) {
+        bottle.visible = true;
+        const t2 = Math.min(1, Math.max(0, (p - 0.67) / 0.33));
+
+        // 1. EXACT 360° ROTATION revealing full label wrap & specifications
+        const rotY = 0.15 + t2 * Math.PI * 2 + mouse.x * 0.4;
+        bottle.rotation.y = rotY;
+        bottle.rotation.x = mouse.y * 0.25;
+
+        // Entry transition from depth
+        const normEntry = Math.min(1, (p - 0.60) / 0.10);
+        bottle.position.z = -14 + normEntry * 14;
+        bottle.position.x = mouse.x * 0.5;
+        bottle.position.y = -1.6 * baseScale + idleFloat;
+        bottle.scale.setScalar((0.75 + normEntry * 0.3) * baseScale);
       } else {
-        bottle.position.z = -100;
+        bottle.visible = false;
+        bottle.position.z = -50;
       }
 
       renderer.render(scene, camera);
@@ -209,7 +321,7 @@ export default function Pharma3DShowcase() {
     return () => {
       cancelAnimationFrame(animationId);
       observer.disconnect();
-      trigger.kill();
+      mm.revert();
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('resize', onResize);
       renderer.dispose();

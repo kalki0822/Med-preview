@@ -121,15 +121,23 @@ export default function Hero3D() {
     // Responsive positioning adjustment for mobile/desktop
     const updateLayout = () => {
       const isMobile = window.innerWidth <= 768;
-      if (isMobile) {
+      const isNarrowMobile = window.innerWidth <= 480;
+      if (isNarrowMobile) {
+        rootGroup.position.set(0, -1.3, -2.8);
+        rootGroup.scale.set(0.62, 0.62, 0.62);
+        camera.fov = 44;
+      } else if (isMobile) {
         rootGroup.position.set(0, -1.2, -2.5);
-        rootGroup.scale.set(0.72, 0.72, 0.72);
+        rootGroup.scale.set(0.70, 0.70, 0.70);
+        camera.fov = 42;
       } else if (window.innerWidth <= 1024) {
         rootGroup.position.set(1.4, -0.6, -0.5);
         rootGroup.scale.set(0.85, 0.85, 0.85);
+        camera.fov = 40;
       } else {
         rootGroup.position.set(2.5, -0.4, 0);
         rootGroup.scale.set(1, 1, 1);
+        camera.fov = 40;
       }
       camera.aspect = container.clientWidth / container.clientHeight;
       camera.updateProjectionMatrix();

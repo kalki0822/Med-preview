@@ -150,6 +150,9 @@ export function createBlisterPack() {
     clearcoatRoughness: 0.1
   });
 
+  const pvcGroup = new THREE.Group();
+  const tabletsGroup = new THREE.Group();
+
   // Grid of 2 columns x 5 rows = 10 blisters
   const cols = 2;
   const rows = 5;
@@ -166,7 +169,7 @@ export function createBlisterPack() {
       const domeMesh = new THREE.Mesh(domeGeo, blisterPvcMaterial);
       domeMesh.rotation.z = Math.PI / 2;
       domeMesh.position.set(x, y, 0.22);
-      group.add(domeMesh);
+      pvcGroup.add(domeMesh);
 
       // Capsule inside pocket (composed of two halves)
       const pillHalf1 = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.24, 20), tabletMaterialTeal);
@@ -185,9 +188,18 @@ export function createBlisterPack() {
       capSphere2.rotation.z = Math.PI / 2;
       capSphere2.position.set(x + 0.24, y, 0.15);
 
-      group.add(pillHalf1, capSphere1, pillHalf2, capSphere2);
+      tabletsGroup.add(pillHalf1, capSphere1, pillHalf2, capSphere2);
     }
   }
+
+  group.add(pvcGroup);
+  group.add(tabletsGroup);
+
+  group.userData = {
+    foil: baseMesh,
+    pvc: pvcGroup,
+    tablets: tabletsGroup
+  };
 
   return group;
 }
@@ -195,7 +207,7 @@ export function createBlisterPack() {
 /**
  * Creates a photorealistic 3D pharmaceutical capsule with two-tone gelatin gloss
  */
-export function createCapsule(color1 = 0x1db9b1, color2 = 0xffffff, radius = 0.45, length = 0.8) {
+export function createCapsule(color1 = 0x1db9b1, color2 = 0xffffff, radius = 0.45, length = 0.8, withContents = true) {
   const group = new THREE.Group();
 
   const mat1 = new THREE.MeshPhysicalMaterial({
@@ -214,31 +226,35 @@ export function createCapsule(color1 = 0x1db9b1, color2 = 0xffffff, radius = 0.4
     metalness: 0.02
   });
 
-  // Top half: cylinder + hemisphere
+  // Top half group (cap)
+  const topHalf = new THREE.Group();
   const cylGeo1 = new THREE.CylinderGeometry(radius, radius, length / 2, 32);
   const cyl1 = new THREE.Mesh(cylGeo1, mat1);
   cyl1.position.y = length / 4;
   cyl1.castShadow = true;
-  group.add(cyl1);
+  topHalf.add(cyl1);
 
   const sphereGeo1 = new THREE.SphereGeometry(radius, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
   const cap1 = new THREE.Mesh(sphereGeo1, mat1);
   cap1.position.y = length / 2;
   cap1.castShadow = true;
-  group.add(cap1);
+  topHalf.add(cap1);
+  group.add(topHalf);
 
-  // Bottom half: cylinder + hemisphere
+  // Bottom half group (body)
+  const bottomHalf = new THREE.Group();
   const cylGeo2 = new THREE.CylinderGeometry(radius * 0.99, radius * 0.99, length / 2, 32);
   const cyl2 = new THREE.Mesh(cylGeo2, mat2);
   cyl2.position.y = -length / 4;
   cyl2.castShadow = true;
-  group.add(cyl2);
+  bottomHalf.add(cyl2);
 
   const sphereGeo2 = new THREE.SphereGeometry(radius * 0.99, 32, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
   const cap2 = new THREE.Mesh(sphereGeo2, mat2);
   cap2.position.y = -length / 2;
   cap2.castShadow = true;
-  group.add(cap2);
+  bottomHalf.add(cap2);
+  group.add(bottomHalf);
 
   // Medical center band
   const bandGeo = new THREE.TorusGeometry(radius * 1.015, 0.02, 16, 32);
@@ -246,6 +262,34 @@ export function createCapsule(color1 = 0x1db9b1, color2 = 0xffffff, radius = 0.4
   const bandMesh = new THREE.Mesh(bandGeo, bandMat);
   bandMesh.rotation.x = Math.PI / 2;
   group.add(bandMesh);
+
+  // Internal pharmaceutical micropellets / sustained-release beads
+  const pelletsGroup = new THREE.Group();
+  if (withContents) {
+    const pelletColors = [0x18a99f, 0xffffff, 0xf6ad55, 0x103444, 0x58c7c0];
+    const pelletGeo = new THREE.SphereGeometry(radius * 0.12, 12, 12);
+    for (let i = 0; i < 28; i++) {
+      const pMat = new THREE.MeshPhysicalMaterial({
+        color: pelletColors[i % pelletColors.length],
+        roughness: 0.18,
+        clearcoat: 0.9
+      });
+      const pMesh = new THREE.Mesh(pelletGeo, pMat);
+      const angle = (i / 28) * Math.PI * 2 + (i % 3);
+      const dist = (0.2 + (i % 5) * 0.14) * (radius * 0.72);
+      const py = ((i % 7) - 3) * (length * 0.08);
+      pMesh.position.set(Math.cos(angle) * dist, py, Math.sin(angle) * dist);
+      pelletsGroup.add(pMesh);
+    }
+  }
+  group.add(pelletsGroup);
+
+  group.userData = {
+    topHalf,
+    bottomHalf,
+    band: bandMesh,
+    pellets: pelletsGroup
+  };
 
   return group;
 }
@@ -267,17 +311,49 @@ export function createPatientMonitor(screenController) {
     metalness: 0.08
   });
 
+  // 1. Rear Housing Group
+  const housingGroup = new THREE.Group();
   const casingGeo = new THREE.BoxGeometry(width, height, depth);
   const casingMesh = new THREE.Mesh(casingGeo, casingMaterial);
   casingMesh.castShadow = true;
   casingMesh.receiveShadow = true;
-  group.add(casingMesh);
+  housingGroup.add(casingMesh);
+
+  // Rear vents / connector sockets on housing
+  const ventMat = new THREE.MeshStandardMaterial({ color: 0x1f3440, roughness: 0.6 });
+  const ventMesh = new THREE.Mesh(new THREE.BoxGeometry(width * 0.7, 0.6, 0.05), ventMat);
+  ventMesh.position.set(0, 0.8, -depth / 2 - 0.02);
+  housingGroup.add(ventMesh);
+  group.add(housingGroup);
+
+  // 2. Internal Electronics / Motherboard (revealed during exploded view)
+  const boardGroup = new THREE.Group();
+  const pcbMat = new THREE.MeshStandardMaterial({ color: 0x135848, roughness: 0.4, metalness: 0.2 });
+  const pcbMesh = new THREE.Mesh(new THREE.BoxGeometry(width * 0.82, height * 0.78, 0.06), pcbMat);
+  boardGroup.add(pcbMesh);
+
+  // Microchips & Gold Traces
+  const chipMat = new THREE.MeshStandardMaterial({ color: 0x0a1114, roughness: 0.2, metalness: 0.5 });
+  const chip1 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.1), chipMat);
+  chip1.position.set(-0.9, 0.2, 0.05);
+  const chip2 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.1, 0.08), chipMat);
+  chip2.position.set(0.9, -0.3, 0.05);
+  boardGroup.add(chip1, chip2);
+
+  const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.2 });
+  const busMesh = new THREE.Mesh(new THREE.BoxGeometry(width * 0.6, 0.15, 0.04), goldMat);
+  busMesh.position.set(0, -0.8, 0.04);
+  boardGroup.add(busMesh);
+  group.add(boardGroup);
+
+  // 3. Front Display Group (bezel, screen, handle, dial, status LED)
+  const displayGroup = new THREE.Group();
 
   // Top ergonomic carry handle
   const handleGeo = new THREE.BoxGeometry(2.4, 0.28, 0.35);
   const handleMesh = new THREE.Mesh(handleGeo, casingMaterial);
   handleMesh.position.set(0, height / 2 + 0.25, 0);
-  group.add(handleMesh);
+  displayGroup.add(handleMesh);
 
   const handleLeg1 = new THREE.BoxGeometry(0.24, 0.35, 0.35);
   const handleLeg2 = handleLeg1.clone();
@@ -285,7 +361,7 @@ export function createPatientMonitor(screenController) {
   legMesh1.position.set(-1.08, height / 2 + 0.1, 0);
   const legMesh2 = new THREE.Mesh(handleLeg2, casingMaterial);
   legMesh2.position.set(1.08, height / 2 + 0.1, 0);
-  group.add(legMesh1, legMesh2);
+  displayGroup.add(legMesh1, legMesh2);
 
   // Dark screen bezel
   const bezelWidth = width * 0.92;
@@ -298,7 +374,7 @@ export function createPatientMonitor(screenController) {
   const bezelGeo = new THREE.BoxGeometry(bezelWidth, bezelHeight, 0.08);
   const bezelMesh = new THREE.Mesh(bezelGeo, bezelMaterial);
   bezelMesh.position.set(0, 0, depth / 2 + 0.04);
-  group.add(bezelMesh);
+  displayGroup.add(bezelMesh);
 
   // Glowing Telemetry LCD Screen (using dynamic canvas texture)
   const screenWidth = bezelWidth * 0.94;
@@ -309,7 +385,7 @@ export function createPatientMonitor(screenController) {
   });
   const screenMesh = new THREE.Mesh(screenGeo, screenMat);
   screenMesh.position.set(0, 0, depth / 2 + 0.09);
-  group.add(screenMesh);
+  displayGroup.add(screenMesh);
 
   // Rotary encoder navigation knob on right bezel
   const knobGeo = new THREE.CylinderGeometry(0.26, 0.26, 0.22, 24);
@@ -317,21 +393,32 @@ export function createPatientMonitor(screenController) {
   const knobMesh = new THREE.Mesh(knobGeo, knobMat);
   knobMesh.rotation.x = Math.PI / 2;
   knobMesh.position.set(width / 2 - 0.42, -height / 2 + 0.6, depth / 2 + 0.1);
-  group.add(knobMesh);
+  displayGroup.add(knobMesh);
 
   // Green operational status LED indicator
   const ledGeo = new THREE.SphereGeometry(0.06, 16, 16);
   const ledMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
   const ledMesh = new THREE.Mesh(ledGeo, ledMat);
   ledMesh.position.set(-width / 2 + 0.45, height / 2 - 0.4, depth / 2 + 0.09);
-  group.add(ledMesh);
+  displayGroup.add(ledMesh);
+  group.add(displayGroup);
 
-  // Sturdy angled desktop / clinical trolley stand
+  // 4. Sturdy angled desktop / clinical trolley stand
+  const standGroup = new THREE.Group();
   const standGeo = new THREE.BoxGeometry(3.6, 0.25, 2.6);
   const standMesh = new THREE.Mesh(standGeo, casingMaterial);
   standMesh.position.set(0, -height / 2 - 0.12, 0.3);
   standMesh.receiveShadow = true;
-  group.add(standMesh);
+  standGroup.add(standMesh);
+  group.add(standGroup);
+
+  group.userData = {
+    housing: housingGroup,
+    internalBoard: boardGroup,
+    display: displayGroup,
+    stand: standGroup,
+    screen: screenMesh
+  };
 
   return group;
 }
@@ -602,6 +689,16 @@ export function createUltrasoundMachine() {
   const cableMesh = new THREE.Mesh(cableGeo, cableMat);
   group.add(cableMesh);
 
+  group.userData = {
+    base: baseMesh,
+    tower: towerMesh,
+    deck: deckGroup,
+    monitor: monitorGroup,
+    holster: holsterMesh,
+    probe: probe,
+    cable: cableMesh
+  };
+
   return group;
 }
 
@@ -803,6 +900,14 @@ export function createSurgicalInstrumentSet() {
   });
 
   group.add(clampGroup);
+
+  group.userData = {
+    tray: trayBase,
+    drape: drapeMesh,
+    scalpel: scalpelGroup,
+    forceps: forcepsGroup,
+    clamp: clampGroup
+  };
 
   return group;
 }

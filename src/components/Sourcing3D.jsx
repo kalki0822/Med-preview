@@ -109,6 +109,9 @@ export default function Sourcing3D({ sourcingImage }) {
 
       const p = scrollProgress.val;
 
+      const isMobile = window.innerWidth <= 768;
+      crate.scale.setScalar(isMobile ? 0.78 : 0.95);
+
       // Continuous 3D rotation and depth translation responding to scroll
       crate.rotation.y = -0.45 + (p - 0.5) * 1.4 + mouse.x + (prefersReducedMotion ? 0 : Math.sin(time * 0.8) * 0.05);
       crate.rotation.x = 0.2 + (p - 0.5) * 0.6 + mouse.y;
@@ -116,8 +119,8 @@ export default function Sourcing3D({ sourcingImage }) {
 
       // Moves forward in depth as user scrolls
       crateGroup.position.z = (p - 0.5) * 3.5;
-      crateGroup.position.x = mouse.x * 0.8;
-      crateGroup.position.y = (p - 0.5) * -0.8 + mouse.y * 0.5;
+      crateGroup.position.x = mouse.x * 0.5;
+      crateGroup.position.y = (p - 0.5) * -0.8 + mouse.y * 0.4;
 
       renderer.render(scene, camera);
     };
